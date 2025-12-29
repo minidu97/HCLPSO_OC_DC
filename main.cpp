@@ -10,11 +10,13 @@
 #include <chrono>
 #include <sys/stat.h>
 
+//platform specific directory creation
 #ifdef _WIN32
     #include <direct.h>
     #define mkdir(dir, mode) _mkdir(dir)
 #endif
 
+//external cec2017 benchmark function
 extern "C" {
     void cec17_test_func(double *x, double *f, int nx, int mx, int func_num);
 }
@@ -45,6 +47,7 @@ public:
     }
 };
 
+//static number initilization
 mt19937 RNG::gen(12345);
 uniform_real_distribution<double> RNG::dis(0.0, 1.0);
 
@@ -96,7 +99,8 @@ void initializeSwarm_LDS(Particle* swarm, int N, int D,
         swarm[i].pbest = new double[D];
         swarm[i].grad_curr = new double[D];
         swarm[i].grad_prev = new double[D];
-
+        
+        //Initialize position using LDS for uniform coverage
         for (int d = 0; d < D; d++) {
             int idx = i * D + d;
             swarm[i].x[d] = a + P0[idx] * (b - a);
@@ -106,6 +110,7 @@ void initializeSwarm_LDS(Particle* swarm, int N, int D,
             swarm[i].grad_prev[d] = 0.0;
         }
 
+        //Evaluate initial fitness
         swarm[i].fitness = fitnessFunction(swarm[i].x, D, FUNC_ID);
         swarm[i].pbest_fitness = swarm[i].fitness;
         FE++;
@@ -125,11 +130,13 @@ int getGbest(Particle* swarm, int N) {
 void LDS_VUS(Particle* swarm, int N, int N1, int D,
              double* P1, double* P2, double* pg, double* gbest,
              int G, int g) {
+    //calculate time varient parameter
     double w  = 0.99 - 0.79 * g / G;
     double k  = 3.0  - 0.5  * g / G;
     double c1 = 2.5  - 2.0  * g / G;
     double c2 = 0.5  + 2.0  * g / G;
 
+    //update velocity for all the particles
     for (int i = 0; i < N; i++) {
         for (int d = 0; d < D; d++) {
             if (i < N1) {
@@ -210,6 +217,7 @@ void CCG_VUS(Particle* swarm, int N, int N1, int D,
 //Update comprehensive learning vector
 void update_pg(Particle* swarm, double* pg, int N, int D) {
     for (int i = 0; i < N; i++) {
+        //calculate learning probability-increased based on the particle index
         double Pc = 0.05 + 0.45 * (exp(10.0 * i / (N - 1)) - 1.0) / (exp(10.0) - 1.0);
         int exemplar = i;
 
@@ -219,6 +227,7 @@ void update_pg(Particle* swarm, double* pg, int N, int D) {
             exemplar = (swarm[r1].pbest_fitness < swarm[r2].pbest_fitness) ? r1 : r2;
         }
 
+        //copy p best to the learning vector
         for (int d = 0; d < D; d++)
             pg[i * D + d] = swarm[exemplar].pbest[d];
     }
@@ -251,13 +260,16 @@ ConvergenceResult run_HCLPSO_single(bool isDC, int N, int D, int FUNC_ID, int ma
     //Start timing
     auto start_time = high_resolution_clock::now();
 
+    //generate initial LDS for population initialization
     double* P0 = new double[N * D];
     if (isDC) generate_LDS_DES(P0, N * D);
     else      generate_LDS_OHS(P0, N * D);
     
+    //initialize particle swarm
     Particle* swarm = new Particle[N];
     initializeSwarm_LDS(swarm, N, D, -100, 100, P0, FE, FUNC_ID);
 
+    //generate LDS sequences for velocity update 
     double* P1 = new double[N1 * D];
     double* P2 = new double[(N - N1) * D];
     double* pg = new double[N * D];
@@ -270,18 +282,22 @@ ConvergenceResult run_HCLPSO_single(bool isDC, int N, int D, int FUNC_ID, int ma
         generate_LDS_OHS(P2, (N - N1) * D);
     }
 
+    //take the initial global best value
     int gbestIdx = getGbest(swarm, N);
     double optimal_value = CEC17_OPTIMA[FUNC_ID - 1];
 
     //Main optimization loop
     while (FE < maxFE) {
+        //take the values and update the comprehensive learning factors
         update_pg(swarm, pg, N, D);
 
+        //based on the current the current phase apply the velocity update stratergy 
         if ((double)FE / maxFE < gCG)
             LDS_VUS(swarm, N, N1, D, P1, P2, pg, swarm[gbestIdx].x, maxFE, FE);
         else
             CCG_VUS(swarm, N, N1, D, P1, P2, pg, swarm[gbestIdx].x, maxFE, FE);
 
+        //Update positions, evaluate fitness, and update personal bests
         for (int i = 0; i < N; i++) {
             updatePosition(swarm[i], D, -100, 100);
             swarm[i].fitness = fitnessFunction(swarm[i].x, D, FUNC_ID);
@@ -330,13 +346,14 @@ ConvergenceResult run_HCLPSO_single(bool isDC, int N, int D, int FUNC_ID, int ma
     return result;
 }
 
-//Statistical calculations
+//Statistical calculations -calculate the arithmatic mean of data
 double calculateMean(const vector<double>& data) {
     double sum = 0.0;
     for (double val : data) sum += val;
     return sum / data.size();
 }
 
+//calculate standard deviation given mean value
 double calculateStd(const vector<double>& data, double mean) {
     double variance = 0.0;
     for (double val : data) {
@@ -345,6 +362,7 @@ double calculateStd(const vector<double>& data, double mean) {
     return sqrt(variance / data.size());
 }
 
+//calculate median
 double calculateMedian(vector<double> data) {
     sort(data.begin(), data.end());
     int n = data.size();
