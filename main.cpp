@@ -412,7 +412,6 @@ void runExperimentsForDimension(bool isDC, int N, int D, int numRuns,
     //Determine maxFE based on dimension
     int maxFE = (D == 10) ? 100000 : 300000;
     
-    //Create dimension-specific directory
     string dimDir = outputDir + "/D" + to_string(D);
     mkdir(dimDir.c_str(), 0777);
     
