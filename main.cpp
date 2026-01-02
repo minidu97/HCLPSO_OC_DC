@@ -24,14 +24,14 @@ extern "C" {
 using namespace std;
 using namespace std::chrono;
 
-//CEC2017 optimal values (F1-F30)
+//CEC2017 known optimal values (F1-F30)
 const double CEC17_OPTIMA[30] = {
     100, 200, 300, 400, 500, 600, 700, 800, 900, 1000,
     1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000,
     2100, 2200, 2300, 2400, 2500, 2600, 2700, 2800, 2900, 3000
 };
 
-//RNG with proper seed management
+//safe random number generation with proper seed management
 class RNG {
 private:
     static mt19937 gen;
@@ -127,11 +127,9 @@ int getGbest(Particle* swarm, int N) {
 }
 
 //LDS-VUS algorithm
-void LDS_VUS(Particle* swarm, int N, int N1, int D,
-             double* P1, double* P2, double* pg, double* gbest,
-             int G, int g) {
+void LDS_VUS(Particle* swarm, int N, int N1, int D, double* P1, double* P2, double* pg, double* gbest,double G, double g) {
     //calculate time varient parameter
-    double w  = 0.99 - 0.79 * g / G;
+    double w  = 0.99 - 0.79 * g / G; 
     double k  = 3.0  - 0.5  * g / G;
     double c1 = 2.5  - 2.0  * g / G;
     double c2 = 0.5  + 2.0  * g / G;
@@ -152,9 +150,7 @@ void LDS_VUS(Particle* swarm, int N, int N1, int D,
 }
 
 //CCG-VUS algorithm
-void CCG_VUS(Particle* swarm, int N, int N1, int D,
-             double* P1, double* P2, double* pg, double* gbest,
-             int G, int g) {
+void CCG_VUS(Particle* swarm, int N, int N1, int D, double* P1, double* P2, double* pg, double* gbest, double G, double g) {
     double w = 0.99 - 0.79 * g / G;
     double k = 3.0  - 0.5  * g / G;
     double c1 = 2.5 - 2.0 * g / G;
@@ -168,7 +164,7 @@ void CCG_VUS(Particle* swarm, int N, int N1, int D,
         }
     }
 
-    //Update exploitation subpopulation with CCG
+    //Update exploitation subpopulation with CCG(conjugate gradient)
     for (int i = N1; i < N; i++) {
         int idx_base = (i - N1) * D;
         
@@ -177,14 +173,14 @@ void CCG_VUS(Particle* swarm, int N, int N1, int D,
             swarm[i].grad_prev[d] = swarm[i].grad_curr[d];
         }
         
-        //Compute current gradient (Eq. 24)
+        //Compute current gradient
         for (int d = 0; d < D; d++) {
             double eps = RNG::rand01();
             int idx = idx_base + d;
             swarm[i].grad_curr[d] = -c1 * P2[idx] * (pg[i * D + d] - swarm[i].x[d]) - c2 * eps * (gbest[d] - swarm[i].x[d]);
         }
         
-        //Compute conjugate inertia coefficient (Eq. 23 - FR method)
+        //Compute conjugate inertia coefficient
         double norm_curr_sq = 0.0;
         double norm_prev_sq = 0.0;
         
@@ -251,7 +247,7 @@ bool checkConvergence(double current_fitness, double optimal_value, double epsil
 ConvergenceResult run_HCLPSO_single(bool isDC, int N, int D, int FUNC_ID, int maxFE, double epsilon_tol) {
     ConvergenceResult result;
     result.converged = false;
-    result.CFEs = maxFE;  // set to maxFE if not converged
+    result.CFEs = maxFE;  //set to maxFE if not converged
     
     int N1 = N / 2;
     double gCG = 0.6;
@@ -347,212 +343,277 @@ ConvergenceResult run_HCLPSO_single(bool isDC, int N, int D, int FUNC_ID, int ma
 }
 
 //Statistical calculations -calculate the arithmatic mean of data
-double calculateMean(const vector<double>& data) {
+double calculateMean(double* data, int size) {
     double sum = 0.0;
-    for (double val : data) sum += val;
-    return sum / data.size();
+    for (int i = 0; i < size; i++) sum += data[i];
+    return sum / size;
 }
 
 //calculate standard deviation given mean value
-double calculateStd(const vector<double>& data, double mean) {
+double calculateStd(double* data, int size, double mean) {
     double variance = 0.0;
-    for (double val : data) {
-        variance += (val - mean) * (val - mean);
-    }
-    return sqrt(variance / data.size());
+    for (int i = 0; i < size; i++) 
+        variance += (data[i] - mean) * (data[i] - mean);
+    return sqrt(variance / size);
 }
 
 //calculate median
-double calculateMedian(vector<double> data) {
-    sort(data.begin(), data.end());
-    int n = data.size();
-    if (n % 2 == 0)
-        return (data[n/2 - 1] + data[n/2]) / 2.0;
-    else
-        return data[n/2];
+double calculateMedian(double* data, int size) {
+    double* temp = new double[size];
+    for (int i = 0; i < size; i++) temp[i] = data[i];
+    sort(temp, temp + size);
+    double result = (size % 2 == 0) ? (temp[size/2 - 1] + temp[size/2]) / 2.0 : temp[size/2];
+    delete[] temp;
+    return result;
 }
 
-//Print formatted table
-void printTableHeader(ofstream& file, const string& title) {
-    file << "\n" << string(120, '=') << "\n";
-    file << title << "\n";
-    file << string(120, '=') << "\n";
+double getMin(double* data, int size) {
+    double minVal = data[0];
+    for (int i = 1; i < size; i++)
+        if (data[i] < minVal) minVal = data[i];
+    return minVal;
 }
 
-void printTableRow(ofstream& file, const string& col1, const string& col2, 
-                   const string& col3, const string& col4, 
-                   const string& col5, const string& col6) {
-    file << left << setw(10) << col1 
-         << right << setw(18) << col2 
-         << right << setw(18) << col3
-         << right << setw(18) << col4
-         << right << setw(18) << col5
-         << right << setw(18) << col6 << "\n";
+double getMax(double* data, int size) {
+    double maxVal = data[0];
+    for (int i = 1; i < size; i++)
+        if (data[i] > maxVal) maxVal = data[i];
+    return maxVal;
 }
 
-void printTableRow7(ofstream& file, const string& col1, const string& col2, 
-                    const string& col3, const string& col4, 
-                    const string& col5, const string& col6, const string& col7) {
-    file << left << setw(10) << col1 
-         << right << setw(15) << col2 
-         << right << setw(15) << col3
-         << right << setw(15) << col4
-         << right << setw(15) << col5
-         << right << setw(15) << col6
-         << right << setw(15) << col7 << "\n";
+//epsilon tolerance based on dimension
+double getEpsilonTol(int D) {
+    if (D == 10) return 5.0;      //5% for D=10
+    else if (D == 30) return 20.0; //20% for D=30
+    else if (D == 50) return 30.0; //30% for D=50
+    else return 40.0;              //40% for D=100
+}
+
+//max FE based on dimension
+int getMaxFE(int D) {
+    if (D == 10) return 100000;       //100k for D=10
+    else if (D == 30) return 300000;  //300k for D=30
+    else if (D == 50) return 500000;  //500k for D=50
+    else return 1000000;              //1M for D=100
+}
+
+//Print table helpers
+void printSeparator(ofstream& file, int width = 140) {
+    file << string(width, '=') << "\n";
+}
+
+void printDashedLine(ofstream& file, int width = 140) {
+    file << string(width, '-') << "\n";
 }
 
 //Run experiments for one dimension
-void runExperimentsForDimension(bool isDC, int N, int D, int numRuns, 
-                                 double epsilon_tol, const string& outputDir) {
+void runExperimentsForDimension(bool isDC, int N, int D, int numRuns, const string& outputDir) {
     
     string mode = isDC ? "DC" : "OC";
     string algoName = "HCLPSO-" + mode;
     
-    //Determine maxFE based on dimension
-    int maxFE = (D == 10) ? 100000 : 300000;
+    double epsilon_tol = getEpsilonTol(D);
+    int maxFE = getMaxFE(D);
     
     string dimDir = outputDir + "/D" + to_string(D);
     mkdir(dimDir.c_str(), 0777);
     
-    //Open summary files
-    ofstream summaryFile(dimDir + "/" + algoName + "_D" + to_string(D) + "_summary.txt");
-    ofstream cfesFile(dimDir + "/" + algoName + "_D" + to_string(D) + "_CFEs.txt");
-    ofstream ctsFile(dimDir + "/" + algoName + "_D" + to_string(D) + "_CTs.txt");
+    //CALCULATION ACCURACY (Mean, Std, Median, Best, Worst)
+    ofstream accuracyFile(dimDir + "/" + algoName + "_D" + to_string(D) + "_accuracy.txt");
+    accuracyFile << fixed << setprecision(6);
     
-    summaryFile << fixed << setprecision(6);
-    cfesFile << fixed << setprecision(2);
-    ctsFile << fixed << setprecision(4);
+    accuracyFile << "\n";
+    printSeparator(accuracyFile);
+    accuracyFile << "TABLE: CALCULATION ACCURACY - " << algoName << " (D=" << D << ")\n";
+    accuracyFile << "Population: N=" << N << " | Runs: " << numRuns << " | MaxFE: " << maxFE 
+                 << " | εtol: " << epsilon_tol << "%\n";
+    printSeparator(accuracyFile);
+    accuracyFile << left << setw(12) << "Function"
+                 << right << setw(18) << "Mean"
+                 << right << setw(18) << "Std"
+                 << right << setw(18) << "Median"
+                 << right << setw(18) << "Best"
+                 << right << setw(18) << "Worst" << "\n";
+    printDashedLine(accuracyFile);
     
-    printTableHeader(summaryFile, algoName + " Accuracy Results (D=" + to_string(D) + ", Runs=" + to_string(numRuns) + ", εtol=" + to_string(epsilon_tol) + "%)");
-    summaryFile << "\n";
-    printTableRow(summaryFile, "Function", "Mean", "Std", "Median", "Best", "Worst");
-    summaryFile << string(120, '-') << "\n";
+    //CONVERGENCE SPEED (CFEs and Success Rate)
+    ofstream speedFile(dimDir + "/" + algoName + "_D" + to_string(D) + "_convergence_speed.txt");
+    speedFile << fixed << setprecision(2);
     
-    printTableHeader(cfesFile, algoName + " Convergence Speed (CFEs) - D=" + to_string(D));
-    cfesFile << "\n";
-    printTableRow7(cfesFile, "Function", "Mean CFEs", "Std CFEs", "Conv. Rate", "Mean CTs", "Std CTs", "Min CTs");
-    cfesFile << string(120, '-') << "\n";
+    speedFile << "\n";
+    printSeparator(speedFile);
+    speedFile << "TABLE: CONVERGENCE SPEED - " << algoName << " (D=" << D << ")\n";
+    speedFile << "Population: N=" << N << " | Runs: " << numRuns << " | MaxFE: " << maxFE 
+              << " | εtol: " << epsilon_tol << "%\n";
+    printSeparator(speedFile);
+    speedFile << left << setw(12) << "Function"
+              << right << setw(18) << "Mean CFEs"
+              << right << setw(18) << "Std CFEs"
+              << right << setw(18) << "Success Rate"
+              << right << setw(18) << "Mean CTs (s)"
+              << right << setw(18) << "Std CTs (s)" << "\n";
+    printDashedLine(speedFile);
     
     cout << "\n" << string(80, '=') << "\n";
-    cout << "Running " << algoName << " on CEC2017 (D=" << D << ", εtol=" << epsilon_tol << "%)\n";
-    cout << "Population: " << N << " | Runs: " << numRuns << " | MaxFE: " << maxFE << "\n";
+    cout << "Running " << algoName << " on CEC2017 (D=" << D << ")\n";
+    cout << "Population: " << N << " | Runs: " << numRuns << " | MaxFE: " << maxFE 
+         << " | εtol: " << epsilon_tol << "%\n";
     cout << string(80, '=') << "\n\n";
     
     //Test functions
-    vector<int> funcIDs;
+    int funcIDs[29];
+    int funcCount = 0;
     for (int i = 1; i <= 30; i++) {
-        if (i != 2) funcIDs.push_back(i);  //Exclude F2
+        if (i != 2) funcIDs[funcCount++] = i;
     }
     
-    for (int funcID : funcIDs) {
-        cout << "F" << setw(2) << funcID << " ";
-        cout.flush();
+    double* all_mean_errors = new double[29];  //For average rank calculation
+    int errorIdx = 0;
+    
+    for (int idx = 0; idx < funcCount; idx++) {
+        int funcID = funcIDs[idx];
+        cout << "F" << setw(2) << funcID << " " << flush;
         
-        vector<double> errors;
-        vector<double> cfes_list;
-        vector<double> cts_list;
+        //Allocate arrays for results
+        double* errors = new double[numRuns];
+        double* cfes_list = new double[numRuns];
+        double* cts_list = new double[numRuns];
         int convergence_count = 0;
         
-        //Individual function file
-        ofstream funcFile(dimDir + "/" + algoName + "_F" + to_string(funcID) + "_D" + to_string(D) + ".txt");
-        funcFile << fixed << setprecision(6);
+        //Individual function detail file
+        ofstream detailFile(dimDir + "/" + algoName + "_F" + to_string(funcID) + "_D" + to_string(D) + "_details.txt");
+        detailFile << fixed << setprecision(6);
+        detailFile << "Function F" << funcID << " - " << algoName << " (D=" << D << ")\n";
+        printDashedLine(detailFile, 100);
+        detailFile << left << setw(8) << "Run"
+                   << right << setw(20) << "Error"
+                   << right << setw(20) << "Fitness"
+                   << right << setw(15) << "CFEs"
+                   << right << setw(15) << "CTs (s)"
+                   << right << setw(12) << "Converged" << "\n";
+        printDashedLine(detailFile, 100);
         
-        printTableHeader(funcFile, "F" + to_string(funcID) + " - " + algoName + " (D=" + to_string(D) + ")");
-        funcFile << "\n";
-        funcFile << left << setw(8) << "Run" 
-                 << right << setw(18) << "Error" 
-                 << right << setw(18) << "Fitness"
-                 << right << setw(15) << "CFEs"
-                 << right << setw(12) << "CTs (s)"
-                 << right << setw(12) << "Converged" << "\n";
-        funcFile << string(85, '-') << "\n";
-        
-        //Run multiple trials
         for (int run = 0; run < numRuns; run++) {
-            RNG::setSeed(run * 54321 + funcID * 9876);
+            RNG::setSeed(run * 54321 + funcID * 9876 + D * 111);
             
             ConvergenceResult res = run_HCLPSO_single(isDC, N, D, funcID, maxFE, epsilon_tol);
             double error = res.final_fitness - CEC17_OPTIMA[funcID - 1];
             
-            errors.push_back(error);
-            cfes_list.push_back(res.CFEs);
-            cts_list.push_back(res.CTs);
+            errors[run] = error;
+            cfes_list[run] = res.CFEs;
+            cts_list[run] = res.CTs;
             if (res.converged) convergence_count++;
             
-            funcFile << left << setw(8) << (run + 1)<< right << setw(18) << scientific << error<< right << setw(18) << fixed << res.final_fitness<< right << setw(15) << res.CFEs << right << setw(12) << setprecision(4) << res.CTs<< right << setw(12) << (res.converged ? "Yes" : "No") << "\n";
+            detailFile << left << setw(8) << (run + 1)
+                      << right << setw(20) << scientific << error
+                      << right << setw(20) << fixed << res.final_fitness
+                      << right << setw(15) << res.CFEs
+                      << right << setw(15) << setprecision(4) << res.CTs
+                      << right << setw(12) << (res.converged ? "Yes" : "No") << "\n";
         }
-        
-        funcFile << string(85, '-') << "\n";
-        funcFile.close();
+        printDashedLine(detailFile, 100);
+        detailFile.close();
         
         //Calculate statistics
-        double mean_error = calculateMean(errors);
-        double std_error = calculateStd(errors, mean_error);
-        double median_error = calculateMedian(errors);
-        double best_error = *min_element(errors.begin(), errors.end());
-        double worst_error = *max_element(errors.begin(), errors.end());
+        double mean_error = calculateMean(errors, numRuns);
+        double std_error = calculateStd(errors, numRuns, mean_error);
+        double median_error = calculateMedian(errors, numRuns);
+        double best_error = getMin(errors, numRuns);
+        double worst_error = getMax(errors, numRuns);
         
-        double mean_cfes = calculateMean(cfes_list);
-        double std_cfes = calculateStd(cfes_list, mean_cfes);
-        double mean_cts = calculateMean(cts_list);
-        double std_cts = calculateStd(cts_list, mean_cts);
-        double min_cts = *min_element(cts_list.begin(), cts_list.end());
-        double conv_rate = (convergence_count * 100.0) / numRuns;
+        double mean_cfes = calculateMean(cfes_list, numRuns);
+        double std_cfes = calculateStd(cfes_list, numRuns, mean_cfes);
+        double mean_cts = calculateMean(cts_list, numRuns);
+        double std_cts = calculateStd(cts_list, numRuns, mean_cts);
+        double success_rate = (convergence_count * 100.0) / numRuns;
         
-        //Write to summary
-        ostringstream fn, me, se, md, be, we;
-        fn << "F" << funcID;
-        me << scientific << setprecision(4) << mean_error;
-        se << scientific << setprecision(4) << std_error;
-        md << scientific << setprecision(4) << median_error;
-        be << scientific << setprecision(4) << best_error;
-        we << scientific << setprecision(4) << worst_error;
-        printTableRow(summaryFile, fn.str(), me.str(), se.str(), md.str(), be.str(), we.str());
+        all_mean_errors[errorIdx++] = mean_error;
         
-        //Write CFEs and CTs
-        ostringstream fn2, mc, sc, cr, mt, st, mint;
-        fn2 << "F" << funcID;
-        mc << fixed << setprecision(0) << mean_cfes;
-        sc << fixed << setprecision(0) << std_cfes;
-        cr << fixed << setprecision(1) << conv_rate << "%";
-        mt << fixed << setprecision(4) << mean_cts;
-        st << fixed << setprecision(4) << std_cts;
-        mint << fixed << setprecision(4) << min_cts;
-        printTableRow7(cfesFile, fn2.str(), mc.str(), sc.str(), cr.str(), mt.str(), st.str(), mint.str());
+        //Write to accuracy table
+        accuracyFile << left << setw(12) << ("F" + to_string(funcID))
+                    << right << setw(18) << scientific << setprecision(4) << mean_error
+                    << right << setw(18) << std_error
+                    << right << setw(18) << median_error
+                    << right << setw(18) << best_error
+                    << right << setw(18) << worst_error << "\n";
         
-        cout << "✓ Mean: " << scientific << setprecision(2) << mean_error 
-             << " | CFEs: " << fixed << setprecision(0) << mean_cfes << "\n";
+        //Write to convergence speed table
+        speedFile << left << setw(12) << ("F" + to_string(funcID))
+                 << right << setw(18) << fixed << setprecision(0) << mean_cfes
+                 << right << setw(18) << std_cfes
+                 << right << setw(18) << setprecision(1) << success_rate << "%"
+                 << right << setw(18) << setprecision(4) << mean_cts
+                 << right << setw(18) << std_cts << "\n";
+        
+        cout << "✓ (Mean: " << scientific << setprecision(2) << mean_error 
+             << ", SR: " << fixed << setprecision(0) << success_rate << "%)\n";
+        
+        //Clean up arrays
+        delete[] errors;
+        delete[] cfes_list;
+        delete[] cts_list;
     }
     
-    summaryFile << string(120, '=') << "\n";
-    cfesFile << string(120, '=') << "\n";
-    summaryFile.close();
-    cfesFile.close();
-    ctsFile.close();
+    printDashedLine(accuracyFile);
+    printDashedLine(speedFile);
+    
+    //Calculate overall statistics
+    double overall_mean = calculateMean(all_mean_errors, errorIdx);
+    
+    accuracyFile << "\nOVERALL STATISTICS:\n";
+    accuracyFile << "Average Mean Error: " << scientific << overall_mean << "\n";
+    
+    printSeparator(accuracyFile);
+    printSeparator(speedFile);
+    
+    accuracyFile.close();
+    speedFile.close();
+    
+    delete[] all_mean_errors;
     
     cout << "\n" << string(80, '=') << "\n";
     cout << "D=" << D << " experiments completed!\n";
+    cout << "Files saved to: " << dimDir << "/\n";
     cout << string(80, '=') << "\n\n";
 }
 
-//Main experiment runner
+//Run all experiments
 void runAllExperiments(bool isDC, const string& outputDir) {
     mkdir(outputDir.c_str(), 0777);
     
     int N = 40;
-    int numRuns = 51;  //Mentioned in the paper
+    int numRuns = 51;
     
-    //D=10 with εtol = 5% (error tolarance)
-    cout << "\n********** Testing D=10 (εtol=5%) **********\n";
-    runExperimentsForDimension(isDC, N, 10, numRuns, 5.0, outputDir);
+    int dimensions[] = {10, 30, 50, 100};
+    int dimCount = 4;
     
-    // D=30 with εtol = 20% (error tolarance)
-    cout << "\n********** Testing D=30 (εtol=20%) **********\n";
-    runExperimentsForDimension(isDC, N, 30, numRuns, 20.0, outputDir);
+    for (int i = 0; i < dimCount; i++) {
+        int D = dimensions[i];
+        cout << "\n********** TESTING DIMENSION D=" << D << " **********\n";
+        runExperimentsForDimension(isDC, N, D, numRuns, outputDir);
+    }
+    
+    //Create summary comparison file
+    ofstream summaryFile(outputDir + "/OVERALL_SUMMARY.txt");
+    summaryFile << "\n";
+    printSeparator(summaryFile);
+    summaryFile << "HCLPSO-" << (isDC ? "DC" : "OC") << " - OVERALL SUMMARY ACROSS ALL DIMENSIONS\n";
+    printSeparator(summaryFile);
+    summaryFile << "\nThis experiment tested the algorithm on:\n";
+    summaryFile << "- 29 CEC2017 functions (F1-F30, excluding F2)\n";
+    summaryFile << "- 4 dimensions: D = 10, 30, 50, 100\n";
+    summaryFile << "- 51 independent runs per function\n";
+    summaryFile << "\nMetrics tracked:\n";
+    summaryFile << "1. Calculation Accuracy: Mean, Std, Median, Best, Worst\n";
+    summaryFile << "2. Convergence Speed: CFEs (function evaluations to converge)\n";
+    summaryFile << "3. Success Rate: Percentage of runs that converged\n";
+    summaryFile << "4. Calculation Time: CTs (seconds)\n";
+    summaryFile << "\nResults are organized by dimension in separate subdirectories.\n";
+    printSeparator(summaryFile);
+    summaryFile.close();
 }
 
-//Main function
+//Main
 int main(int argc, char* argv[]) {
     if (argc != 2) {
         cerr << "Usage: ./hclpso DC|OC\n";

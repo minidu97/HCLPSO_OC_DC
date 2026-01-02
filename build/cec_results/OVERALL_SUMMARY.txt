@@ -1,0 +1,18 @@
+
+============================================================================================================================================
+HCLPSO-OC - OVERALL SUMMARY ACROSS ALL DIMENSIONS
+============================================================================================================================================
+
+This experiment tested the algorithm on:
+- 29 CEC2017 functions (F1-F30, excluding F2)
+- 4 dimensions: D = 10, 30, 50, 100
+- 51 independent runs per function
+
+Metrics tracked:
+1. Calculation Accuracy: Mean, Std, Median, Best, Worst
+2. Convergence Speed: CFEs (function evaluations to converge)
+3. Success Rate: Percentage of runs that converged
+4. Calculation Time: CTs (seconds)
+
+Results are organized by dimension in separate subdirectories.
+============================================================================================================================================
